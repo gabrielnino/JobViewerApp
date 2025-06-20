@@ -1,23 +1,17 @@
 import sys
 import json
-from PyQt6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QVBoxLayout,
-    QWidget,
-    QLabel,
-    QPushButton,
-    QFileDialog,
-    QProgressBar,
-    QLineEdit,
-    QHBoxLayout,
-    QScrollArea,
-    QFrame,
-    QMessageBox,
-    QTextEdit
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QVBoxLayout, QWidget,
+    QLabel, QPushButton, QFileDialog, QProgressBar,
+    QLineEdit, QHBoxLayout, QScrollArea, QFrame,
+    QMessageBox, QTextEdit, QStyleFactory
 )
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, QUrl, QTimer, Signal, QObject
+from PySide6.QtGui import QDesktopServices, QFontDatabase, QFont
+
+
+class LogEmitter(QObject):
+    log_signal = Signal(str)
 
 
 class JobViewerApp(QMainWindow):
@@ -26,131 +20,18 @@ class JobViewerApp(QMainWindow):
         self.job_data = []
         self.filtered_data = []
         self.current_index = -1
+        self.log_emitter = LogEmitter()
+        self.log_emitter.log_signal.connect(self.handle_log)
         self.init_ui()
-        self.set_styles()
-
-    def set_styles(self):
-        """Apply CSS styles for better visual appearance."""
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f5f5;
-            }
-            QLabel {
-                font-size: 14px;
-                margin: 5px 0;
-            }
-            QLabel[objectName^="lbl_title"] {
-                font-size: 18px;
-                font-weight: bold;
-                color: #2c3e50;
-            }
-            QLabel[objectName^="lbl_company"] {
-                font-size: 16px;
-                color: #7f8c8d;
-            }
-            QLabel[objectName^="lbl_salary"] {
-                font-size: 15px;
-                color: #27ae60;
-                font-weight: bold;
-            }
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            QPushButton:disabled {
-                background-color: #bdc3c7;
-            }
-            QLineEdit {
-                padding: 8px;
-                font-size: 14px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            QFrame {
-                background-color: white;
-                padding: 10px;
-                border-radius: 4px;
-            }
-            QProgressBar {
-                text-align: center;
-            }
-        """)
+        self.apply_dark_theme()
 
     def init_ui(self):
         self.setWindowTitle("Job Offer Viewer")
-        self.setMinimumSize(600, 500)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #121212;
-            }
-            QLabel {
-                color: #e0e0e0;
-                font-size: 14px;
-                margin: 5px 0;
-            }
-            QLabel[objectName^="lbl_title"] {
-                font-size: 18px;
-                font-weight: bold;
-                color: #ffffff;
-            }
-            QLabel[objectName^="lbl_company"] {
-                font-size: 16px;
-                color: #aaaaaa;
-            }
-            QLabel[objectName^="lbl_salary"] {
-                font-size: 15px;
-                color: #81c784;
-                font-weight: bold;
-            }
-            QPushButton {
-                background-color: #1e88e5;
-                color: #ffffff;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #1565c0;
-            }
-            QPushButton:disabled {
-                background-color: #424242;
-                color: #777777;
-            }
-            QLineEdit {
-                background-color: #1e1e1e;
-                color: #e0e0e0;
-                padding: 8px;
-                font-size: 14px;
-                border: 1px solid #333;
-                border-radius: 4px;
-            }
-            QFrame {
-                background-color: #1e1e1e;
-                padding: 10px;
-                border-radius: 4px;
-            }
-            QScrollArea {
-                background-color: #121212;
-            }
-            QProgressBar {
-                background-color: #333;
-                color: #e0e0e0;
-                border: 1px solid #555;
-                border-radius: 4px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: #1e88e5;
-            }
-        """)
+        self.setMinimumSize(800, 600)
+
+        # Use native style for better performance
+        QApplication.setStyle(QStyleFactory.create('Fusion'))
+
         # Central Widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -172,23 +53,33 @@ class JobViewerApp(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         self.job_display = QWidget()
-        self.job_display.setStyleSheet("background-color: #1e1e1e;")
         self.job_layout = QVBoxLayout(self.job_display)
+
+        # Use monospace font for better readability
+        fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+
         self.placeholder = QLabel("Please load a JSON file to view job offers")
         self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.placeholder.setStyleSheet("font-size: 16px; color: #666;")
+        self.placeholder.setFont(fixed_font)
         self.job_layout.addWidget(self.placeholder)
 
         self.lbl_title = QLabel()
+        self.lbl_title.setFont(fixed_font)
         self.lbl_company = QLabel()
+        self.lbl_company.setFont(fixed_font)
         self.lbl_salary = QLabel()
-        self.lbl_description = QLabel()
-        self.lbl_description.setWordWrap(True)
+        self.lbl_salary.setFont(fixed_font)
+
+        # Use QTextEdit for description with basic markdown support
+        self.txt_description = QTextEdit()
+        self.txt_description.setReadOnly(True)
+        self.txt_description.setFont(fixed_font)
+
         self.btn_apply = QPushButton("Apply Now")
         self.btn_apply.clicked.connect(self.open_job_link)
 
         for widget in [self.lbl_title, self.lbl_company, self.lbl_salary,
-                       self.lbl_description, self.btn_apply]:
+                       self.txt_description, self.btn_apply]:
             widget.setVisible(False)
             self.job_layout.addWidget(widget)
 
@@ -213,21 +104,45 @@ class JobViewerApp(QMainWindow):
         # Log Viewer
         self.log_viewer = QTextEdit()
         self.log_viewer.setReadOnly(True)
-        self.log_viewer.setFixedHeight(100)
-        self.log_viewer.setStyleSheet("""
-            background-color: #1e1e1e;  /* Un gris oscuro compatible con dark mode */
-            color: #d4d4d4;            /* Gris claro para texto */
-            font-family: Consolas, monospace;
-            font-size: 12px;
-        """)
+        self.log_viewer.setMaximumHeight(100)
+        self.log_viewer.setFont(fixed_font)
         layout.addWidget(self.log_viewer)
 
         self.toggle_navigation(False)
 
-    def log(self, message):
-        """Log messages to the log viewer and console."""
-        self.log_viewer.append(message)
+        # Performance optimization
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
+    def apply_dark_theme(self):
+        """Apply optimized dark theme with less style overhead"""
+        dark_palette = self.palette()
+        dark_palette.setColor(dark_palette.ColorRole.Window, Qt.GlobalColor.darkGray)
+        dark_palette.setColor(dark_palette.ColorRole.WindowText, Qt.GlobalColor.white)
+        dark_palette.setColor(dark_palette.ColorRole.Base, Qt.GlobalColor.black)
+        dark_palette.setColor(dark_palette.ColorRole.AlternateBase, Qt.GlobalColor.darkGray)
+        dark_palette.setColor(dark_palette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
+        dark_palette.setColor(dark_palette.ColorRole.ToolTipText, Qt.GlobalColor.white)
+        dark_palette.setColor(dark_palette.ColorRole.Text, Qt.GlobalColor.white)
+        dark_palette.setColor(dark_palette.ColorRole.Button, Qt.GlobalColor.darkGray)
+        dark_palette.setColor(dark_palette.ColorRole.ButtonText, Qt.GlobalColor.white)
+        dark_palette.setColor(dark_palette.ColorRole.BrightText, Qt.GlobalColor.red)
+        dark_palette.setColor(dark_palette.ColorRole.Highlight, Qt.GlobalColor.blue)
+        dark_palette.setColor(dark_palette.ColorRole.HighlightedText, Qt.GlobalColor.white)
+        self.setPalette(dark_palette)
+
+    def log(self, message):
+        """Thread-safe logging"""
+        self.log_emitter.log_signal.emit(message)
+
+    def handle_log(self, message):
+        """Handle log messages in main thread"""
+        self.log_viewer.append(message)
+        # Auto-scroll to bottom
+        self.log_viewer.verticalScrollBar().setValue(
+            self.log_viewer.verticalScrollBar().maximum()
+        )
 
     def load_json(self):
         try:
@@ -235,36 +150,55 @@ class JobViewerApp(QMainWindow):
                 self, "Open JSON File", "", "JSON Files (*.json)"
             )
             if filepath:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                # Use QTimer to keep UI responsive during load
+                QTimer.singleShot(0, lambda: self._load_json_file(filepath))
 
-                if not isinstance(data, list):
-                    raise ValueError("JSON file should contain an array of job objects")
-
-                if not data:
-                    raise ValueError("JSON file is empty")
-
-                self.job_data = data
-                self.filtered_data = data.copy()
-                self.current_index = 0
-                self.update_display()
-
-                self.placeholder.setVisible(False)
-                for widget in [self.lbl_title, self.lbl_company, self.lbl_salary,
-                               self.lbl_description, self.btn_apply]:
-                    widget.setVisible(True)
-
-                self.statusBar().showMessage(f"Loaded {len(data)} jobs")
-                self.log(f"✅ Loaded {len(data)} jobs from {filepath}")
-
-        except json.JSONDecodeError:
-            QMessageBox.critical(self, "Error", "Invalid JSON file format")
-            self.log("❌ Failed to load JSON: Invalid JSON file format")
         except Exception as e:
+            self.log(f"❌ Error: {str(e)}")
             QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
+
+    def _load_json_file(self, filepath):
+        """Actual file loading in a separate method"""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            if not isinstance(data, list):
+                raise ValueError("JSON file should contain an array of job objects")
+
+            if not data:
+                raise ValueError("JSON file is empty")
+
+            self.job_data = data
+            self.filtered_data = data.copy()
+            self.current_index = 0
+
+            # Defer UI updates
+            QTimer.singleShot(0, self.update_display)
+
+            self.placeholder.setVisible(False)
+            for widget in [self.lbl_title, self.lbl_company, self.lbl_salary,
+                           self.txt_description, self.btn_apply]:
+                widget.setVisible(True)
+
+            self.log(f"✅ Loaded {len(data)} jobs from {filepath}")
+
+        except Exception as e:
             self.log(f"❌ Failed to load JSON: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
 
     def apply_filter(self):
+        """Debounced filter application"""
+        if hasattr(self, '_filter_timer'):
+            self._filter_timer.stop()
+
+        self._filter_timer = QTimer()
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.timeout.connect(self._apply_filter_actual)
+        self._filter_timer.start(300)  # 300ms delay
+
+    def _apply_filter_actual(self):
+        """Actual filter implementation"""
         search_text = self.search_field.text().lower()
         if not search_text:
             self.filtered_data = self.job_data.copy()
@@ -280,7 +214,7 @@ class JobViewerApp(QMainWindow):
         self.current_index = 0 if self.filtered_data else -1
         self.toggle_navigation(len(self.filtered_data) > 0)
         self.update_display()
-        self.log(f"🔍 Applied filter '{search_text}' → {len(self.filtered_data)} jobs matched")
+        self.log(f"🔍 Applied filter → {len(self.filtered_data)} matches")
 
     def update_display(self):
         if not self.filtered_data or self.current_index < 0:
@@ -289,12 +223,17 @@ class JobViewerApp(QMainWindow):
         job = self.filtered_data[self.current_index]
         self.lbl_title.setText(job.get('JobOfferTitle', 'No title'))
         self.lbl_company.setText(f"Company: {job.get('CompanyName', 'Not specified')}")
+
         if salary := job.get('SalaryOrBudgetOffered'):
-            self.lbl_salary.setText(f"SalaryOrBudgetOffered: {salary}")
+            self.lbl_salary.setText(f"Salary/Budget: {salary}")
             self.lbl_salary.setVisible(True)
         else:
             self.lbl_salary.setVisible(False)
-        self.lbl_description.setText(job.get('Description', 'No description available'))
+
+        # Use HTML formatting for better description display
+        desc = job.get('Description', 'No description available')
+        self.txt_description.setHtml(f"<pre>{desc}</pre>")
+
         self.btn_apply.setVisible('Link' in job)
         self.progress.setMaximum(len(self.filtered_data))
         self.progress.setValue(self.current_index + 1)
@@ -309,25 +248,29 @@ class JobViewerApp(QMainWindow):
         if self.current_index < len(self.filtered_data) - 1:
             self.current_index += 1
             self.update_display()
-            self.toggle_navigation(True)
-            self.log(f"➡ Moved to job {self.current_index + 1}/{len(self.filtered_data)}")
+            self.log(f"➡ Job {self.current_index + 1}/{len(self.filtered_data)}")
 
     def prev_job(self):
         if self.current_index > 0:
             self.current_index -= 1
             self.update_display()
-            self.toggle_navigation(True)
-            self.log(f"⬅ Moved to job {self.current_index + 1}/{len(self.filtered_data)}")
+            self.log(f"⬅ Job {self.current_index + 1}/{len(self.filtered_data)}")
 
     def open_job_link(self):
         if self.filtered_data and 0 <= self.current_index < len(self.filtered_data):
             job = self.filtered_data[self.current_index]
-            if 'link' in job and job['link']:
-                QDesktopServices.openUrl(QUrl(job['link']))
-                self.log(f"🌐 Opened link: {job['link']}")
+            if 'Link' in job and job['Link']:
+                QDesktopServices.openUrl(QUrl(job['Link']))
+                self.log(f"🌐 Opened: {job['Link']}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # Set high DPI scaling
+    app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
+    app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+
     window = JobViewerApp()
     window.show()
     sys.exit(app.exec())
