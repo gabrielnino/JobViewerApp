@@ -24,6 +24,7 @@ class JobViewerApp(QMainWindow):
         self.log_emitter.log_signal.connect(self.handle_log)
         self.init_ui()
         self.apply_dark_theme()
+        self.setWindowState(Qt.WindowState.WindowMaximized)  # Add this line
 
     def init_ui(self):
         self.setWindowTitle("Job Offer Viewer")
